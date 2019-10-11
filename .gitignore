@@ -1,0 +1,7 @@
+*.pyc
+*.key
+
+.idea/*
+data/*
+
+data.db
