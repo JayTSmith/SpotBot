@@ -2,121 +2,163 @@ import datetime
 import os
 import sqlite3
 
-import requests
 from math import ceil
+
+import requests
+
 from requests.auth import HTTPBasicAuth
 
 with open(os.path.join(os.path.dirname(__file__), 'spot.key'), 'r') as f:
-    C_ID = f.readline().strip()
-    C_SEC = f.readline().strip()
+  C_ID = f.readline().strip()
+  C_SEC = f.readline().strip()
+
+
+class SpotURLs(object):
+  AUTH_PATH = 'https://accounts.spotify.com/api/token'
+  API_PATH = 'https://api.spotify.com/v1/'
+
+  PLAYLIST_PATH = 'playlists/'
+  SEARCH_PATH = 'search/'
+  TRACK_PATH = 'tracks/'
+  USER_PATH = 'users/'
+
 
 RATE_LIMITED = -234
 
+VALID_SEARCH_TYPES = ('album', 'artist', 'playlist', 'track')
+
 
 class SpotifyClient(object):
-    ins = None
+  ins = None
 
-    def __init__(self, **kwargs):
-        global C_ID, C_SEC
+  def __init__(self, **kwargs):
+    global C_ID, C_SEC
 
-        if self.ins is None:
-            SpotifyClient.ins = self
+    if self.ins is None:
+      SpotifyClient.ins = self
 
-        self.cid = kwargs.get('id', C_ID)
-        self.csec = kwargs.get('secret', C_SEC)
+    self.cid = kwargs.get('id', C_ID)
+    self.csec = kwargs.get('secret', C_SEC)
 
-        self.token = None
-        self.exp = None
-        self.wait_time = None
+    self.token = None
+    self.exp = None
+    self.wait_time = None
 
-    @classmethod
-    def instance(cls):
-        if cls.ins is None:
-            cls()
-        return cls.ins
+  @classmethod
+  def instance(cls):
+    if cls.ins is None:
+      cls()
+    return cls.ins
 
-    @staticmethod
-    def get_id(spot_share_str):
-        spot_str = spot_share_str.strip()
-        if spot_str.count(':') != 2 or spot_str.split(':')[0] != 'spotify':
-            return ''  # If not valid share string from spotify
-        return spot_str.split(':')[-1]
+  @staticmethod
+  def get_id(spot_share_str):
+    spot_str = spot_share_str.strip()
+    if spot_str.count(':') != 2 or spot_str.split(':')[0] != 'spotify':
+      return ''  # If not valid share string from spotify
+    return spot_str.split(':')[-1]
 
-    def is_token_valid(self):
-        return self.token is not None and datetime.datetime.now() < self.exp
+  def _page_generator(self, page, k):
+    """Spotify has some pages that return a list of objects along with a link to the next page.
+    This returns a generator that will get every item from the pages. We need the item name to use as a key for the dictionary."""
 
-    def refresh_token(self):
-        if self.is_token_valid():
-            return None  # No need to update the token, its still good.
+    while page is not None:
+      for i in page[k]['items']:
+        yield i
+      page = self.make_auth_request(page[k]['next']).json() if page[k]['next'] else None
 
-        out = requests.post('https://accounts.spotify.com/api/token',
-                            params={'grant_type': 'client_credentials'},
-                            headers={'Content-Type': 'application/x-www-form-urlencoded'},
-                            auth=HTTPBasicAuth(self.cid, self.csec))
+  def is_token_valid(self):
+    return self.token is not None and datetime.datetime.now() < self.exp
 
-        self.token = out.json()['access_token']
-        self.exp = datetime.datetime.now() + datetime.timedelta(seconds=out.json()['expires_in'])
+  def refresh_token(self):
+    if self.is_token_valid():
+      return None  # No need to update the token, its still good.
 
-    def make_auth_request(self, url, headers=None, **kwargs):
-        if not self.is_token_valid():
-            self.refresh_token()
+    out = requests.post(SpotURLs.AUTH_PATH,
+                        params={'grant_type': 'client_credentials'},
+                        headers={'Content-Type': 'application/x-www-form-urlencoded'},
+                        auth=HTTPBasicAuth(self.cid, self.csec))
 
-        h = headers or {}
-        h.update({'Authorization': 'Bearer ' + self.token})
-        h.update(kwargs.pop('headers', {}))
+    self.token = out.json()['access_token']
+    self.exp = datetime.datetime.now() + datetime.timedelta(seconds=out.json()['expires_in'])
 
-        if self.wait_time is None or self.wait_time < datetime.datetime.now():
-            res = requests.get(url, headers=h, **kwargs)
-            if res.status_code == 429:
-                self.wait_time = datetime.datetime.now() + datetime.timedelta(seconds=res.headers['Retry-After'])
-                return RATE_LIMITED
-            return res
-        else:
-            return RATE_LIMITED
+  def make_auth_request(self, url, headers=None, **kwargs):
+    if not self.is_token_valid():
+      self.refresh_token()
 
-    def get_user(self, uid):
-        res = self.make_auth_request('https://api.spotify.com/v1/users/' + uid)
-        if res != RATE_LIMITED and res.status_code == 200:
-            return res.json()
-        return res
+    h = headers or {}
+    h.update({'Authorization': 'Bearer ' + self.token})
+    h.update(kwargs.pop('headers', {}))
 
-    def get_playlist(self, pid, fields=None):
-        kwargs = {'params': {}}
-        if fields is not None:
-            kwargs['params']['fields'] = ','.join(fields)
+    if self.wait_time is None or self.wait_time < datetime.datetime.now():
+      res = requests.get(url, headers=h, **kwargs)
+      if res.status_code == 429:
+        self.wait_time = datetime.datetime.now() + datetime.timedelta(seconds=res.headers['Retry-After'])
+        return RATE_LIMITED
+      return res
+    else:
+      return RATE_LIMITED
 
-        res = self.make_auth_request('https://api.spotify.com/v1/playlists/' + pid, **kwargs)
-        if res != RATE_LIMITED and res.status_code == 200:
-            return res.json()
-        return None
+  def get_user(self, uid):
+    res = self.make_auth_request(SpotURLs.API_PATH + SpotURLs.USER_PATH + uid)
+    if res != RATE_LIMITED and res.status_code == 200:
+      return res.json()
+    return res
 
-    def get_all_playlist_tracks(self, pid):
-        play = self.get_playlist(pid)
+  def get_playlist(self, pid, fields=None):
+    kwargs = {'params': {}}
+    if fields is not None:
+      kwargs['params']['fields'] = ','.join(fields)
 
-        while play is not None:
-            for t in play['tracks']['items']:
-                yield t
-            play = self.make_auth_request(play['tracks']['next']) if play['tracks']['next'] is not None else None
-        raise StopIteration
+    res = self.make_auth_request(SpotURLs.API_PATH + SpotURLs.PLAYLIST_PATH + pid, **kwargs)
+    if res != RATE_LIMITED and res.status_code == 200:
+      return res.json()
+    return None
 
-    def get_track(self, spot_id):
-        res = self.make_auth_request('https://api.spotify.com/v1/tracks/' + spot_id)
-        if res != RATE_LIMITED and res.status_code == 200:
-            return res.json()
-        return None
+  def get_all_playlist_tracks(self, pid):
+    play = self.get_playlist(pid)
 
-    def get_tracks(self, spot_ids):
-        reqs = int(ceil(len(spot_ids) / 50))
-        data = {'tracks': []}
+    while play is not None:
+      for t in play['tracks']['items']:
+        yield t
+      play = self.make_auth_request(play['tracks']['next']).json() if play['tracks']['next'] is not None else None
+    raise StopIteration
 
-        for i in range(reqs):
-            params = {'ids', ','.join(spot_ids[i * 50: (i+1) * 50])}  # Spotify will only return a max of 50 tracks at once.
-            res = self.make_auth_request('https://api.spotify.com/v1/tracks', {'params': params})
-            if res is not None and res.status_code == 200:
-                data['tracks'].extend(res.json()['tracks'])
+  def get_track(self, spot_id):
+    res = self.make_auth_request(SpotURLs.API_PATH + SpotURLs.TRACK_PATH + spot_id)
+    if res != RATE_LIMITED and res.status_code == 200:
+      return res.json()
+    return None
 
-        return data
+  def get_tracks(self, spot_ids):
+    reqs = int(ceil(len(spot_ids) / 50))
+    data = {'tracks': []}
 
+    for i in range(reqs):
+      params = {'ids': ','.join(spot_ids[i * 50: (i + 1) * 50])}  # Spotify will only return a max of 50 tracks at once.
+      res = self.make_auth_request(SpotURLs.API_PATH + SpotURLs.TRACK_PATH, params=params)
+      if res is not None and res.status_code == 200:
+        data['tracks'].extend(res.json()['tracks'])
+
+    return data
+
+  def search(self, q, t=(VALID_SEARCH_TYPES[-1],)):
+    for i in t:
+      if i not in VALID_SEARCH_TYPES:
+        raise ValueError('Every element in t must be in VALID_SEARCH_TYPES')
+
+    p = {'q': q, 'type': ','.join(t)}
+
+    res = self.make_auth_request(SpotURLs.API_PATH + SpotURLs.SEARCH_PATH, params=p)
+    if res != RATE_LIMITED and res.status_code == 200:
+      print('URL:', res.url)
+      j = res.json()
+      ret = {}
+      for i in t:
+        k = i.lower()
+        # For some reason, they decided to make type lack the s that is used as the dict key.
+        ret[k] = {'items': self._page_generator(j, k + 's'), 'total': j[k + 's']['total']}
+      return ret
+    return None
 
 
 class LocalDatabase(object):
@@ -135,7 +177,7 @@ class LocalDatabase(object):
     with sqlite3.connect(LocalDatabase.db_path) as conn:
       cur = conn.cursor()
 
-      cur.execute('SELECT * FROM songs WHERE spot_id=?', (song_id, ))
+      cur.execute('SELECT * FROM songs WHERE spot_id=?', (song_id,))
       results = cur.fetchall()
 
       cur.close()
@@ -147,7 +189,7 @@ class LocalDatabase(object):
     with sqlite3.connect(LocalDatabase.db_path) as conn:
       cur = conn.cursor()
 
-      cur.execute("SELECT * FROM votes WHERE song=? ORDER BY round ASC", (song_id, ))
+      cur.execute("SELECT * FROM votes WHERE song=? ORDER BY round ASC", (song_id,))
       results = cur.fetchall()
       if rollover:
         new_round = results[0][2] + 1
@@ -194,7 +236,7 @@ class LocalDatabase(object):
 
       # Rollover attempt.
       if len(results) == 1 and LocalDatabase.get_score(song) == 0:
-        cur.execute("INSERT INTO songs VALUES (?, ?, ?)", (song, round_, 'ROLLOVER|'+s_info['added_by']['id']))
+        cur.execute("INSERT INTO songs VALUES (?, ?, ?)", (song, round_, 'ROLLOVER|' + s_info['added_by']['id']))
       # New song.
       elif not len(results):
         cur.execute("INSERT INTO songs VALUES (?, ?, ?)", (song, round_, s_info['added_by']['id']))
@@ -204,13 +246,13 @@ class LocalDatabase(object):
         added = False
 
       cur.close()
-    
+
     return added
 
 
 def is_num(s):
-    try:
-        float(s)
-        return True
-    except ValueError:
-        return False
+  try:
+    float(s)
+    return True
+  except ValueError:
+    return False
