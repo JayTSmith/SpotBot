@@ -3,12 +3,11 @@ import asyncio
 import discord
 from discord.ext import commands
 
-from bot import SpotBot
 from .util import LocalDatabase, SpotifyClient
 
 
 class VoteCog(commands.Cog):
-    def __init__(self, bot: SpotBot):
+    def __init__(self, bot: commands.Bot):
         self.bot = bot
 
     @commands.command()
