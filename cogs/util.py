@@ -150,7 +150,6 @@ class SpotifyClient(object):
 
     res = self.make_auth_request(SpotURLs.API_PATH + SpotURLs.SEARCH_PATH, params=p)
     if res != RATE_LIMITED and res.status_code == 200:
-      print('URL:', res.url)
       j = res.json()
       ret = {}
       for i in t:

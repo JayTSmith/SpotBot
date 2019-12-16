@@ -1,30 +1,32 @@
-import asyncio
 import json
 import os
-from random import choice
+import sys
 
-import discord
 from discord.ext import commands
 
 
 CONFIG_PATH = 'data/config.json'
 COG_PATH = 'cogs'
+DEBUG_CONFIG_PATH = 'data/debug_config.json'
 STRINGS_PATH = 'data/strings.json'
 
 
 class SpotBot(commands.Bot):
-  def __init__(self, *args, **kwargs):
+  def __init__(self, debug=0, *args, **kwargs):
     super(SpotBot, self).__init__(*args, **kwargs)
 
     self.config = None
     self.strings = None
 
-    self.load_config()
+    self.load_config(debug)
     self.load_extensions()
 
-  def load_config(self):
-    print('Loading configuration...', end='')
-    c_f = open(CONFIG_PATH)
+  def load_config(self, debug):
+    conf = DEBUG_CONFIG_PATH if debug else CONFIG_PATH
+
+    print(f'Loading configuration({conf})...', end='')
+
+    c_f = open(conf)
     self.config = json.load(c_f)
     c_f.close()
 
@@ -47,6 +49,8 @@ class SpotBot(commands.Bot):
         self.load_extension(ext_name)
     print('Done with extensions.')
 
-bot = SpotBot(command_prefix='$')
+d = '--debug' in sys.argv
+print(f'Running bot in {"Normal" if not d else "Debug"} mode')
+bot = SpotBot(debug=d, command_prefix='$')
 
 bot.run(bot.config['token'])

@@ -3,11 +3,12 @@ import asyncio
 import discord
 from discord.ext import commands
 
+from bot import SpotBot
 from .util import LocalDatabase, SpotifyClient
 
 
 class VoteCog(commands.Cog):
-    def __init__(self, bot: commands.Bot):
+    def __init__(self, bot: SpotBot):
         self.bot = bot
 
     @commands.command()
@@ -22,7 +23,7 @@ class VoteCog(commands.Cog):
         spot = SpotifyClient()
         round_num = LocalDatabase.get_current_round()+1
         for track in spot.get_all_playlist_tracks(self.bot.config['playlist_id']):
-          added = LocalDatabase.add_song(track, round_num)
+          added = 1 if self.bot.config['debug'] else LocalDatabase.add_song(track, round_num)
           if added:
             msg = await channel.send('https://open.spotify.com/track/{}'.format(track['track']['id']))
             await msg.add_reaction(self.bot.config['yes_vote'])
@@ -72,7 +73,9 @@ class VoteCog(commands.Cog):
         bob.add_field(name='Abstained', value='\n'.join((str(u) for u in resp if resp[u] == 0)) or 'Nobody')
 
         await re_chan.send(embed=bob)
-        LocalDatabase.insert_votes(song_id, resp)
+
+        if not self.bot.config['debug']:
+          LocalDatabase.insert_votes(song_id, resp)
 
       summary.add_field(name='Results', value='\n'.join(results))
       await (await re_chan.send(embed=summary)).pin()
