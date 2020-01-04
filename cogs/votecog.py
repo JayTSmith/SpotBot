@@ -1,5 +1,3 @@
-import asyncio
-
 import discord
 from discord.ext import commands
 
@@ -19,7 +17,7 @@ class VoteCog(commands.Cog):
       if msgs:
         await ctx.send('There is still a round going.')
       else:
-        spot = SpotifyClient()
+        spot = SpotifyClient.instance()
         round_num = LocalDatabase.get_current_round()+1
         for track in spot.get_all_playlist_tracks(self.bot.config['playlist_id']):
           added = 1 if self.bot.config['debug'] else LocalDatabase.add_song(track, round_num)
@@ -42,7 +40,7 @@ class VoteCog(commands.Cog):
       async for msg in vote_chan.history():
         resp = dict(zip(vote_chan.members, (0 for i in range(len(vote_chan.members)))))
         song_id = msg.content[msg.content.rindex('/')+1:]
-        track = SpotifyClient().get_track(song_id)
+        track = SpotifyClient.instance().get_track(song_id)
         for react in msg.reactions:
           if react.emoji == self.bot.config['yes_vote']:
             async for user in react.users():
@@ -92,6 +90,31 @@ class VoteCog(commands.Cog):
     @commands.is_owner()
     async def s_wipe(self, ctx):
       await self.bot.get_channel(self.bot.config['song_channel']).purge()
-      
+
+    @commands.command()
+    @commands.is_owner()
+    async def remind(self, ctx):
+      vote_chan = self.bot.get_channel(self.bot.config['song_channel'])
+      valid_reacts = (self.bot.config['yes_vote'], self.bot.config['no_vote'], self.bot.config['abstain_vote'])
+      voters = set(vote_chan.members)
+
+      left_over = dict(((voter, []) for voter in voters))
+
+      async for msg in vote_chan.history():
+        members_reacted = set()
+        for react in msg.reactions:
+          if react not in valid_reacts:
+            continue
+          async for user in react.users():
+            members_reacted.add(user)
+
+        for voter in (voters - members_reacted):
+          song_id = msg.content[msg.content.rindex('/') + 1:]
+          track = SpotifyClient.instance().get_track(song_id)
+          left_over[voter].append(track)
+
+      print(left_over)
+
+
 def setup(bot: commands.Bot):
     bot.add_cog(VoteCog(bot))
