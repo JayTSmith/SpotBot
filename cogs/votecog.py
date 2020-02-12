@@ -65,9 +65,9 @@ class VoteCog(commands.Cog):
                             description='Score: {} | Round: {}'.format(score, LocalDatabase.get_current_round()))
         resp.pop(self.bot.user)
 
-        bob.add_field(name='Upvoted', value='\n'.join((str(u) for u in resp if resp[u] == 1)) or 'Nobody')
-        bob.add_field(name='Downvoted', value='\n'.join((str(u) for u in resp if resp[u] == -1)) or 'Nobody')
-        bob.add_field(name='Abstained', value='\n'.join((str(u) for u in resp if resp[u] == 0)) or 'Nobody')
+        bob.add_field(name='Upvoted', value='\n'.join((str(u.display_name) for u in resp if resp[u] == 1)) or 'Nobody')
+        bob.add_field(name='Downvoted', value='\n'.join((str(u.display_name) for u in resp if resp[u] == -1)) or 'Nobody')
+        bob.add_field(name='Abstained', value='\n'.join((str(u.display_name) for u in resp if resp[u] == 0)) or 'Nobody')
 
         await re_chan.send(embed=bob)
 
