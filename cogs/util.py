@@ -167,7 +167,7 @@ class LocalDatabase(object):
   def check():
     if not os.path.isfile(LocalDatabase.db_path):
       with sqlite3.connect(LocalDatabase.db_path) as conn:
-        conn.execute('CREATE TABLE songs(spot_id TEXT, round INTEGER, added_by TEXT)')
+        conn.execute('CREATE TABLE songs(spot_id TEXT, round INTEGER, added_by TEXT, rollover BOOLEAN)')
         conn.execute('CREATE TABLE votes(user TEXT, value INTEGER, round INTEGER, song TEXT)')
 
   @staticmethod
@@ -235,10 +235,10 @@ class LocalDatabase(object):
 
       # Rollover attempt.
       if len(results) == 1 and LocalDatabase.get_score(song) == 0:
-        cur.execute("INSERT INTO songs VALUES (?, ?, ?)", (song, round_, 'ROLLOVER|' + s_info['added_by']['id']))
+        cur.execute("INSERT INTO songs VALUES (?, ?, ?, ?)", (song, round_, s_info['added_by']['id'], 1))
       # New song.
       elif not len(results):
-        cur.execute("INSERT INTO songs VALUES (?, ?, ?)", (song, round_, s_info['added_by']['id']))
+        cur.execute("INSERT INTO songs VALUES (?, ?, ?, ?)", (song, round_, s_info['added_by']['id'], 0))
       # Nope.
       else:
         print('Song {} not added. It can\'t rollover.'.format(song))
