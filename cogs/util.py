@@ -171,6 +171,16 @@ class LocalDatabase(object):
         conn.execute('CREATE TABLE votes(user TEXT, value INTEGER, round INTEGER, song TEXT)')
 
   @staticmethod
+  def get_votes(user):
+    with sqlite3.connect(LocalDatabase.db_path) as conn:
+      cur = conn.cursor()
+
+      cur.execute('SELECT COUNT(value) FROM votes WHERE user=? GROUP BY value;', (user,))
+      results = [_[0] for _ in cur.fetchall()]
+
+    return results
+
+  @staticmethod
   def get_song(song_id):
     LocalDatabase.check()
     with sqlite3.connect(LocalDatabase.db_path) as conn:
@@ -247,6 +257,39 @@ class LocalDatabase(object):
       cur.close()
 
     return added
+
+  @staticmethod
+  def get_songs_stats(spot_name):
+    with sqlite3.connect(LocalDatabase.db_path) as conn:
+      cur = conn.cursor()
+
+      cur.execute('SELECT SUM(value) FROM songs s INNER JOIN votes v ON s.round=v.round AND s.spot_id=v.song WHERE added_by=? AND rollover=0 GROUP BY s.spot_id;', (spot_name, ))
+
+      non_roll = cur.fetchall()
+
+      cur.execute('SELECT SUM(value) FROM songs s INNER JOIN votes v ON s.round=v.round AND s.spot_id=v.song WHERE added_by=? AND rollover=1 GROUP BY s.spot_id;', (spot_name, ))
+      roll = cur.fetchall()
+
+      # Song added, songs accepted, songs rejected
+      # rollover songs, rollover accepted, rollover rejected
+      results = [0, 0, 0, 0, 0 ,0]
+      results[0] = len(non_roll)
+
+      for song_score in (s[0] for s in non_roll):
+        if song_score > 0:
+          results[1] += 1
+        elif song_score < 0:
+          results[2] += 1
+        else:
+          results[3] += 1
+
+      for song_score in (s[0] for s in roll):
+        if song_score > 0:
+          results[4] += 1
+        else:
+          results[5] += 1
+
+    return results
 
 
 def is_num(s):

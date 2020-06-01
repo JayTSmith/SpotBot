@@ -1,5 +1,7 @@
 import discord
+from discord import Embed
 from discord.ext import commands
+from discord.ext.commands import Context
 
 from .util import LocalDatabase, SpotifyClient
 
@@ -91,30 +93,35 @@ class VoteCog(commands.Cog):
     async def s_wipe(self, ctx):
       await self.bot.get_channel(self.bot.config['song_channel']).purge()
 
+
     @commands.command()
-    @commands.is_owner()
-    async def remind(self, ctx):
-      vote_chan = self.bot.get_channel(self.bot.config['song_channel'])
-      valid_reacts = (self.bot.config['yes_vote'], self.bot.config['no_vote'], self.bot.config['abstain_vote'])
-      voters = set(vote_chan.members)
+    @commands.has_role('Voter')
+    async def votes(self, ctx: Context):
+      usr = ctx.message.mentions[0]
 
-      left_over = dict(((voter, []) for voter in voters))
+      tally_votes = LocalDatabase.get_votes(str(usr))
 
-      async for msg in vote_chan.history():
-        members_reacted = set()
-        for react in msg.reactions:
-          if react not in valid_reacts:
-            continue
-          async for user in react.users():
-            members_reacted.add(user)
+      e = Embed(title=f'{usr.name}')
+      e.add_field(name='Downvotes', value=f'{tally_votes[0]}',inline=True)
+      e.add_field(name='Abstains', value=f'{tally_votes[1]}', inline=True)
+      e.add_field(name='Upvotes', value=f'{tally_votes[2]}', inline=True)
 
-        for voter in (voters - members_reacted):
-          song_id = msg.content[msg.content.rindex('/') + 1:]
-          track = SpotifyClient.instance().get_track(song_id)
-          left_over[voter].append(track)
+      await ctx.send(embed=e)
 
-      print(left_over)
+    @commands.command()
+    @commands.has_role('Voter')
+    async def stats(self, ctx:Context, spot_name):
+      tally_songs = LocalDatabase.get_songs_stats(spot_name)
 
+      e = Embed(title=f'Stats')
+      e.add_field(name='Total songs added', value=f'{tally_songs[0]}', inline=False)
+      e.add_field(name='Songs accepted', value=f'{tally_songs[1]}', inline=True)
+      e.add_field(name='Songs rejected', value=f'{tally_songs[2]}', inline=True)
+      e.add_field(name='Songs rollover', value=f'{tally_songs[3]}', inline=False)
+      e.add_field(name='Rollover songs accepted', value=f'{tally_songs[4]}', inline=True)
+      e.add_field(name='Rollover songs rejected', value=f'{tally_songs[5]}', inline=True)
+
+      await ctx.send(embed=e)
 
 def setup(bot: commands.Bot):
     bot.add_cog(VoteCog(bot))

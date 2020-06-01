@@ -26,11 +26,11 @@ class SpotBot(commands.Bot):
 
     print(f'Loading configuration({conf})...', end='')
 
-    c_f = open(conf)
+    c_f = open(conf, encoding='utf8')
     self.config = json.load(c_f)
     c_f.close()
 
-    s_f = open(STRINGS_PATH)
+    s_f = open(STRINGS_PATH, encoding='utf8')
     self.strings = json.load(s_f)
     s_f.close()
     print('Done')
