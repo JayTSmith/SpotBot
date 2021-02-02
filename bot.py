@@ -2,6 +2,7 @@ import json
 import os
 import sys
 
+from discord import Intents
 from discord.ext import commands
 
 
@@ -10,6 +11,8 @@ COG_PATH = 'cogs'
 DEBUG_CONFIG_PATH = 'data/debug_config.json'
 STRINGS_PATH = 'data/strings.json'
 
+INTENTS = Intents.default()
+INTENTS.members = True
 
 class SpotBot(commands.Bot):
   def __init__(self, debug=0, *args, **kwargs):
@@ -51,6 +54,6 @@ class SpotBot(commands.Bot):
 
 d = '--debug' in sys.argv
 print(f'Running bot in {"Normal" if not d else "Debug"} mode')
-bot = SpotBot(debug=d, command_prefix='$')
+bot = SpotBot(debug=d, command_prefix='$', intents=INTENTS)
 
 bot.run(bot.config['token'])
